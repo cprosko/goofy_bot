@@ -1,0 +1,2 @@
+# Exclude as it includes private Discord information
+config.yaml
