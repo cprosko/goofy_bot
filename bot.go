@@ -164,10 +164,8 @@ func (b *Bot) getRandomDuration() time.Duration {
 }
 
 func (b *Bot) PlaySoundboardSound(soundID string) error {
-	endpoint := fmt.Sprintf(
-		"/channels/%s/voice-channel-messages",
-		b.Config.VoiceChannelID,
-	)
+	endpoint := discordgo.EndpointChannel(b.Config.VoiceChannelID) +
+		"/send-soundboard-sound"
 
 	// Construct the payload to send to the Discord API
 	payload := struct {

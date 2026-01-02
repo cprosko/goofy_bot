@@ -45,7 +45,7 @@ func fetchDefaultSounds(
 	session *discordgo.Session,
 	guildID string,
 ) ([]Sound, error) {
-	endpoint := fmt.Sprintf("/guilds/%s/soundboard-default-sounds", guildID)
+	endpoint := discordgo.EndpointGuild(guildID) + "/soundboard-default-sounds"
 	return fetchSounds(session, endpoint)
 }
 
@@ -53,7 +53,7 @@ func fetchGuildSounds(
 	session *discordgo.Session,
 	guildID string,
 ) ([]Sound, error) {
-	endpoint := fmt.Sprintf("/guilds/%s/soundboard-sounds", guildID)
+	endpoint := discordgo.EndpointGuild(guildID) + "/soundboard-sounds"
 	return fetchSounds(session, endpoint)
 }
 
