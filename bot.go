@@ -34,6 +34,8 @@ func initializeBot(conf *Config) (*Bot, error) {
 	if err != nil {
 		return bot, fmt.Errorf("Could not open Session: %w", err)
 	}
+	bot.refreshSounds()
+
 	return bot, nil
 }
 
@@ -45,10 +47,23 @@ func (b *Bot) Close() {
 func (b *Bot) refreshSounds() {
 	customSounds, err := fetchGuildSounds(b.Session, b.Config.ServerID)
 	if err != nil {
-		log.Printf("Error fetching sounds: %v", err)
+		log.Printf("Error fetching custom sounds: %v", err)
 		return
 	}
 	b.CustomSounds = availableSounds(customSounds, b.Config)
+	if !b.Config.UseDefaultSounds {
+		b.SoundManager.UpdateIDs(b.CustomSounds)
+		return
+	}
+	if len(b.DefaultSounds) == 0 {
+		defaultSounds, err := fetchDefaultSounds(b.Session, b.Config.ServerID)
+		if err != nil {
+			log.Printf("Error fetching default sounds: %v", err)
+			return
+		}
+		b.DefaultSounds = availableSounds(defaultSounds, b.Config)
+	}
+	b.SoundManager.UpdateIDs(append(b.CustomSounds, b.DefaultSounds...))
 }
 
 func (b *Bot) startSoundLoop() error {
