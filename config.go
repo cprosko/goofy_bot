@@ -41,11 +41,16 @@ func ParseConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	conf := &Config{}
 	err = yaml.Unmarshal(data, conf)
 	if err != nil {
 		return nil, err
 	}
+
+	token := os.Getenv("DISCORD_BOT_TOKEN")
+	conf.Token = token
+
 	conf.addDefaultResponses()
 	return conf, nil
 }
