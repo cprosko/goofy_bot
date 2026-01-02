@@ -45,7 +45,7 @@ func InitializeBot(conf *Config) (*Bot, error) {
 		return bot, fmt.Errorf("Could not open Session: %w", err)
 	}
 	bot.RefreshSounds()
-	bot.ListenForSoundboardChanges()
+	bot.RegisterHandlers()
 	return bot, nil
 }
 
@@ -84,15 +84,36 @@ func (b *Bot) RefreshSounds() {
 	b.SoundManager.UpdateIDs(append(b.CustomSounds, b.DefaultSounds...))
 }
 
-func (b *Bot) ListenForSoundboardChanges() {
-	b.Session.AddHandler(func(s *discordgo.Session, e *discordgo.Event) {
-		// Listen for ANY soundboard-related event
-		if e.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" ||
-			e.Type == "GUILD_SOUNDBOARD_DELETE" {
-			log.Printf("Updating sound list due to Discord event %v\n", e.Type)
-			b.RefreshSounds()
-		}
+func (b *Bot) RegisterHandlers() {
+	// Listen to messages in the text channel
+	b.Session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		b.handleMessage(m)
 	})
+	// Listen for any change to the soundboard
+	b.Session.AddHandler(func(s *discordgo.Session, e *discordgo.Event) {
+		b.interpretEvent(e)
+	})
+}
+
+func (b *Bot) handleMessage(msg *discordgo.MessageCreate) {
+	// Ignore messages from the bot itself
+	if msg.Author.ID == b.Session.State.User.ID {
+		return
+	}
+	// '!refresh': refresh soundboard
+	if msg.Content == "!refresh" {
+		log.Printf("Refresh command received from user: %s", msg.Author.Username)
+		b.RefreshSounds()
+		b.Session.ChannelMessageSend(msg.ChannelID, b.Config.Responses["refresh"])
+	}
+}
+
+func (b *Bot) interpretEvent(event *discordgo.Event) {
+	if event.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" ||
+		event.Type == "GUILD_SOUNDBOARD_DELETE" {
+		log.Printf("Updating sound list due to Discord event %v\n", event.Type)
+		b.RefreshSounds()
+	}
 }
 
 func (b *Bot) Close() {
