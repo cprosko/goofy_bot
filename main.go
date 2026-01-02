@@ -2,13 +2,8 @@ package main
 
 // Standard packages
 import (
-	// Standard Packages
 	"fmt"
 	"log"
-	"os"
-
-	// External Packages
-	"github.com/bwmarrin/discordgo"
 )
 
 const configPath string = "./config.yaml"
@@ -16,26 +11,18 @@ const configPath string = "./config.yaml"
 
 func main() {
 	// Load configuration
-	token := os.Getenv("DISCORD_BOT_TOKEN")
-	conf := parseConfig(configPath)
-
-	// Create session
-	session, err := discordgo.New("Bot " + token)
+	conf, err := parseConfig(configPath)
 	if err != nil {
-		log.Fatal("Error creating Discord session, ", err)
+		log.Fatal("Error loading config.yaml,", err)
 	}
-
-	// Set bot intents
-	session.Identify.Intents = discordgo.IntentsGuildVoiceStates
-
-	// Open connection
-	err = session.Open()
+	fmt.Printf("Config:\n%+v\n", conf)
+	bot, err := initializeBot(conf)
 	if err != nil {
-		log.Fatal("Error opening connection,", err)
+		log.Fatalf("Failed to initialize bot: %v", err)
 	}
-	defer session.Close()
+	defer bot.Close()
 
-	// TODO: random sound interval logic
+	// bot.startSoundLoop()
 
 	fmt.Println("TODO")
 }
