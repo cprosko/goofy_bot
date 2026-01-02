@@ -19,7 +19,7 @@ func main() {
 	defer stop()
 
 	// Load configuration
-	conf, err := parseConfig(configPath)
+	conf, err := ParseConfig(configPath)
 	if err != nil {
 		log.Fatal("Error loading config.yaml,", err)
 	}
