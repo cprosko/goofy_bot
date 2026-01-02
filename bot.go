@@ -11,7 +11,8 @@ import (
 
 type Bot struct {
 	Session       *discordgo.Session
-	config        *Config
+	Config        *Config
+	SoundManager  *SoundManager
 	CustomSounds  []string
 	DefaultSounds []string
 }
@@ -23,7 +24,8 @@ func initializeBot(conf *Config) (*Bot, error) {
 	}
 	bot := &Bot{
 		Session:       session,
-		config:        conf,
+		Config:        conf,
+		SoundManager:  &SoundManager{AvailableIDs: []string{}},
 		CustomSounds:  []string{},
 		DefaultSounds: []string{},
 	}
@@ -41,12 +43,12 @@ func (b *Bot) Close() {
 }
 
 func (b *Bot) refreshSounds() {
-	customSounds, err := fetchGuildSounds(b.Session, b.config.ServerID)
+	customSounds, err := fetchGuildSounds(b.Session, b.Config.ServerID)
 	if err != nil {
 		log.Printf("Error fetching sounds: %v", err)
 		return
 	}
-	b.CustomSounds = availableSounds(customSounds, b.config)
+	b.CustomSounds = availableSounds(customSounds, b.Config)
 }
 
 func (b *Bot) startSoundLoop() error {

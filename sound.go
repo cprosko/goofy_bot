@@ -23,21 +23,21 @@ type Sound struct {
 
 type SoundManager struct {
 	sync.RWMutex
-	availableIDs []string
+	AvailableIDs []string
 }
 
 func (sm *SoundManager) GetRandomID() string {
 	sm.RLock()
 	defer sm.RUnlock()
-	if len(sm.availableIDs) == 0 {
+	if len(sm.AvailableIDs) == 0 {
 		return ""
 	}
-	return sm.availableIDs[rand.IntN(len(sm.availableIDs))]
+	return sm.AvailableIDs[rand.IntN(len(sm.AvailableIDs))]
 }
 
 func (sm *SoundManager) UpdateIDs(newIDs []string) {
 	sm.Lock()
-	sm.availableIDs = newIDs
+	sm.AvailableIDs = newIDs
 	sm.Unlock()
 }
 
