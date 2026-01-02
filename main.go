@@ -16,13 +16,13 @@ func main() {
 		log.Fatal("Error loading config.yaml,", err)
 	}
 	fmt.Printf("Config:\n%+v\n", conf)
-	bot, err := initializeBot(conf)
+	bot, err := InitializeBot(conf)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}
 	defer bot.Close()
 
-	// bot.startSoundLoop()
+	// bot.StartSoundLoop()
 
 	fmt.Println("TODO")
 }
