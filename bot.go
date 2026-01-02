@@ -2,8 +2,11 @@ package main
 
 import (
 	// Standard Packages
+	"context"
 	"fmt"
 	"log"
+	"math/rand/v2"
+	"time"
 
 	// External Packages
 	"github.com/bwmarrin/discordgo"
@@ -29,7 +32,14 @@ func InitializeBot(conf *Config) (*Bot, error) {
 		CustomSounds:  []string{},
 		DefaultSounds: []string{},
 	}
-	bot.Session.Identify.Intents = discordgo.IntentsGuildVoiceStates
+	// In order: join voice channel and track who is in it, receive soundboard
+	// notification events, listen to channel text messages, and see message
+	// content. IntentsMessageContent must also be activated on Developer Portal
+	bot.Session.Identify.Intents = discordgo.IntentsGuildVoiceStates |
+		discordgo.IntentsGuilds |
+		discordgo.IntentsGuildMessages |
+		discordgo.IntentsMessageContent
+	// IntentsMessageContent must also be activated in Developer Portal
 	err = bot.Session.Open()
 	if err != nil {
 		return bot, fmt.Errorf("Could not open Session: %w", err)
@@ -37,6 +47,19 @@ func InitializeBot(conf *Config) (*Bot, error) {
 	bot.RefreshSounds()
 	bot.ListenForSoundboardChanges()
 	return bot, nil
+}
+
+func (b *Bot) JoinVoiceChannel() error {
+	_, err := b.Session.ChannelVoiceJoin(
+		b.Config.ServerID,
+		b.Config.VoiceChannelID,
+		false, // bot is unmuted
+		true,  // bot is 'deaf' to voice
+	)
+	if err != nil {
+		return fmt.Errorf("Failed to join voice channel: %w", err)
+	}
+	return nil
 }
 
 func (b *Bot) RefreshSounds() {
@@ -65,8 +88,8 @@ func (b *Bot) ListenForSoundboardChanges() {
 	b.Session.AddHandler(func(s *discordgo.Session, e *discordgo.Event) {
 		// Listen for ANY soundboard-related event
 		if e.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" ||
-			 e.Type == "GUILD_SOUNDBOARD_DELETE" {
-			fmt.Printf("Updating sound list due to Discord event %v\n", e.Type)
+			e.Type == "GUILD_SOUNDBOARD_DELETE" {
+			log.Printf("Updating sound list due to Discord event %v\n", e.Type)
 			b.RefreshSounds()
 		}
 	})
@@ -77,10 +100,64 @@ func (b *Bot) Close() {
 	b.Session.Close()
 }
 
-func (b *Bot) StartSoundLoop() error {
-	// Initially fetch all available sounds
-	b.RefreshSounds()
+func (b *Bot) StartSoundLoop(ctx context.Context) {
+	log.Printf(
+		"Starting randomized sound loop. Target channel: %s",
+		b.Config.VoiceChannelID,
+	)
 
-	// Set up ticker for periodically refreshing sounds
+	for {
+		// Calculate random delay to wait for next sound
+		delay := b.getRandomDuration()
+		log.Printf("Next sound in %v", delay)
+
+		// Wait for the timer OR a potential stop signal
+		select {
+		case <-ctx.Done():
+			log.Println("Sound loop received the stop signal. Exiting...")
+			return
+		case <-time.After(delay):
+			// Pick a sound
+			soundID := b.SoundManager.GetRandomID()
+			if soundID == "" {
+				log.Println("No sounds available to play. Skipping...")
+				continue
+			}
+			// Trigger the sound
+			// NOTE: the bot must be in the voice channel for this to work
+			err := b.PlaySoundboardSound(soundID)
+			if err != nil {
+				log.Printf("Error playing soundboard sound: %v", err)
+			} else {
+				log.Printf("Successfully triggered sound: %s", soundID)
+			}
+		}
+	}
+}
+
+func (b *Bot) getRandomDuration() time.Duration {
+	min := b.Config.MinInterval
+	max := b.Config.MaxInterval
+	seconds := rand.IntN(max-min+1) + min
+	return time.Duration(seconds) * time.Second
+}
+
+func (b *Bot) PlaySoundboardSound(soundID string) error {
+	endpoint := fmt.Sprintf(
+		"/channels/%s/voice-channel-messages",
+		b.Config.VoiceChannelID,
+	)
+
+	// Construct the payload to send to the Discord API
+	payload := struct {
+		SoundID string `json:"sound_id"`
+	}{
+		SoundID: soundID,
+	}
+
+	_, err := b.Session.Request("POST", endpoint, payload)
+	if err != nil {
+		return fmt.Errorf("failed to trigger soundboard: %w", err)
+	}
 	return nil
 }
