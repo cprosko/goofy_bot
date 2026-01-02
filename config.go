@@ -19,7 +19,24 @@ type Config struct {
 	Responses        map[string]string `yaml:"responses"`
 }
 
-func parseConfig(path string) (*Config, error) {
+func (c *Config) addDefaultResponses() {
+	if c.Responses == nil {
+		c.Responses = make(map[string]string)
+	}
+
+	defaultResponses := map[string]string{
+		"refresh": "Refreshed soundboard!",
+	}
+
+	for cmd, resp := range defaultResponses {
+		_, exists := c.Responses[cmd]
+		if !exists {
+			c.Responses[cmd] = resp
+		}
+	}
+}
+
+func ParseConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -29,5 +46,6 @@ func parseConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	conf.addDefaultResponses()
 	return conf, nil
 }
