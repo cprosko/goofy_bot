@@ -21,12 +21,14 @@ type Config struct {
 	RapidFireCountMax    int               `yaml:"rapid_fire_count_max"`
 	ExcludedSounds       []string          `yaml:"excluded_sounds"`
 	UseDefaultSounds     bool              `yaml:"use_default_sounds"`
-	Responses            map[string]string `yaml:"responses"`
+	CommandResponses     map[string]string `yaml:"command_responses"`
+	ResponseProbability  float32           `yaml:"response_probability"`
+	Responses            []string          `yaml:"responses"`
 }
 
-func (c *Config) addDefaultResponses() {
-	if c.Responses == nil {
-		c.Responses = make(map[string]string)
+func (c *Config) addDefaultCommandResponses() {
+	if c.CommandResponses == nil {
+		c.CommandResponses = make(map[string]string)
 	}
 
 	defaultResponses := map[string]string{
@@ -34,9 +36,9 @@ func (c *Config) addDefaultResponses() {
 	}
 
 	for cmd, resp := range defaultResponses {
-		_, exists := c.Responses[cmd]
+		_, exists := c.CommandResponses[cmd]
 		if !exists {
-			c.Responses[cmd] = resp
+			c.CommandResponses[cmd] = resp
 		}
 	}
 }
@@ -56,6 +58,6 @@ func ParseConfig(path string) (*Config, error) {
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	conf.Token = token
 
-	conf.addDefaultResponses()
+	conf.addDefaultCommandResponses()
 	return conf, nil
 }

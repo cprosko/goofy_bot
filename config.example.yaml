@@ -12,5 +12,8 @@ excluded_sounds:
   - "excluded_sound_id_1"
   - "excluded_sound_id_2"
 use_default_sounds: true
-responses:
+command_responses:
   refresh: "🔄 Soundboard list refreshed!"
+response_probability: 0.1
+responses:
+  - "Sorry, I didn't quite understand that."

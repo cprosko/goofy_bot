@@ -104,36 +104,48 @@ func (b *Bot) RefreshSounds() {
 
 func (b *Bot) RegisterHandlers() {
 	// Join channel on Session ready and server recognized
-	b.Session.AddHandler(func(s *discordgo.Session, g *discordgo.GuildCreate) {
-		// Check this is the guild from the config
-		if g.ID != b.Config.ServerID {
-			return
-		}
-		log.Printf("Guild available: %s", g.Name)
+	b.Session.AddHandler(
+		func(s *discordgo.Session, g *discordgo.GuildCreate) {
+			// Check this is the guild from the config
+			if g.ID != b.Config.ServerID {
+				return
+			}
+			log.Printf("Guild available: %s", g.Name)
 
-		// Ensure we only start one loop
-		b.mu.Lock()
-		if b.loopRunning {
+			// Ensure we only start one loop
+			b.mu.Lock()
+			if b.loopRunning {
+				b.mu.Unlock()
+				return
+			}
+			b.loopRunning = true
 			b.mu.Unlock()
-			return
-		}
-		b.loopRunning = true
-		b.mu.Unlock()
 
-		if err := b.JoinVoiceChannel(); err != nil {
-			log.Printf("Join error: %v", err)
-		}
-		b.RefreshSounds()
-		go b.StartSoundLoop()
-	})
+			if err := b.JoinVoiceChannel(); err != nil {
+				log.Printf("Join error: %v", err)
+			}
+			b.RefreshSounds()
+			go b.StartSoundLoop()
+		},
+	)
 	// Listen to messages in the text channel
-	b.Session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		b.handleMessage(m)
-	})
+	b.Session.AddHandler(
+		func(s *discordgo.Session, m *discordgo.MessageCreate) {
+			b.handleMessage(m)
+		},
+	)
 	// Listen for any change to the soundboard
-	b.Session.AddHandler(func(s *discordgo.Session, e *discordgo.Event) {
-		b.interpretEvent(e)
-	})
+	b.Session.AddHandler(
+		func(s *discordgo.Session, e *discordgo.Event) {
+			b.interpretEvent(e)
+		},
+	)
+	// Listen for voice activity and respond with text-to-speech
+	b.Session.AddHandler(
+		func(s *discordgo.Session, v *discordgo.VoiceSpeakingUpdate) {
+			b.handleVoiceMessage(v)
+		},
+	)
 }
 
 func (b *Bot) handleMessage(msg *discordgo.MessageCreate) {
@@ -145,7 +157,8 @@ func (b *Bot) handleMessage(msg *discordgo.MessageCreate) {
 	if msg.Content == "!refresh" {
 		log.Printf("Refresh command received from user: %s", msg.Author.Username)
 		b.RefreshSounds()
-		b.Session.ChannelMessageSend(msg.ChannelID, b.Config.Responses["refresh"])
+		b.Session.ChannelMessageSend(msg.ChannelID,
+			b.Config.CommandResponses["refresh"])
 	}
 }
 
@@ -155,6 +168,24 @@ func (b *Bot) interpretEvent(event *discordgo.Event) {
 		log.Printf("Updating sound list due to Discord event %v\n", event.Type)
 		b.RefreshSounds()
 	}
+}
+
+func (b *Bot) handleVoiceMessage(v *discordgo.VoiceSpeakingUpdate) {
+	// Ignore the bot itself
+	if v.UserID == b.Session.State.User.ID {
+		return
+	}
+
+	// v.Speaking is 1 if they started talking and 0 if they stopped
+	if v.Speaking == true {
+		if rand.Float32() < b.Config.ResponseProbability {
+			go b.respondWithTTS()
+		}
+	}
+}
+
+func (b *Bot) respondWithTTS() {
+	// TODO: Not implemented
 }
 
 func (b *Bot) Close() {
@@ -212,10 +243,10 @@ func (b *Bot) PlaySoundGrouping(soundID string) {
 func (b *Bot) PlayRapidFireSound(soundID string) {
 	min := b.Config.RapidFireCountMin
 	max := b.Config.RapidFireCountMax
-	count := min + rand.IntN(max - min + 1)
+	count := min + rand.IntN(max-min+1)
 	min = b.Config.RapidFireMinInterval
 	max = b.Config.RapidFireMaxInterval
-	interval := min + rand.IntN(max - min + 1)
+	interval := min + rand.IntN(max-min+1)
 	for range count {
 		// Use a goroutine to avoid latency of request handling
 		go func() {
