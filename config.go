@@ -9,14 +9,19 @@ import (
 )
 
 type Config struct {
-	Token            string            `yaml:"bot_token"`
-	ServerID         string            `yaml:"server_id"`
-	VoiceChannelID   string            `yaml:"voice_channel_id"`
-	MinInterval      int               `yaml:"min_interval_seconds"`
-	MaxInterval      int               `yaml:"max_interval_seconds"`
-	ExcludedSounds   []string          `yaml:"excluded_sounds"`
-	UseDefaultSounds bool              `yaml:"use_default_sounds"`
-	Responses        map[string]string `yaml:"responses"`
+	Token                string            `yaml:"bot_token"`
+	ServerID             string            `yaml:"server_id"`
+	VoiceChannelID       string            `yaml:"voice_channel_id"`
+	MinInterval          int               `yaml:"min_interval_seconds"`
+	MaxInterval          int               `yaml:"max_interval_seconds"`
+	RapidFireProbability float32           `yaml:"rapid_fire_probability"`
+	RapidFireMinInterval int               `yaml:"rapid_fire_min_interval_milliseconds"`
+	RapidFireMaxInterval int               `yaml:"rapid_fire_max_interval_milliseconds"`
+	RapidFireCountMin    int               `yaml:"rapid_fire_count_min"`
+	RapidFireCountMax    int               `yaml:"rapid_fire_count_max"`
+	ExcludedSounds       []string          `yaml:"excluded_sounds"`
+	UseDefaultSounds     bool              `yaml:"use_default_sounds"`
+	Responses            map[string]string `yaml:"responses"`
 }
 
 func (c *Config) addDefaultResponses() {

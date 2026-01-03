@@ -13,6 +13,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const tolerance float32 = 0.001
+
 type Bot struct {
 	Session       *discordgo.Session
 	Config        *Config
@@ -60,7 +62,7 @@ func (b *Bot) JoinVoiceChannel() error {
 		b.Config.ServerID,
 		b.Config.VoiceChannelID,
 		false, // bot is unmuted
-		false,  // bot is not 'deaf' to voice
+		false, // bot is not 'deaf' to voice
 	)
 	if err != nil {
 		return fmt.Errorf("Failed to join voice channel: %w", err)
@@ -185,12 +187,7 @@ func (b *Bot) StartSoundLoop() {
 			}
 			// Trigger the sound
 			// NOTE: the bot must be in the voice channel for this to work
-			err := b.PlaySoundboardSound(soundID)
-			if err != nil {
-				log.Printf("Error playing soundboard sound: %v", err)
-			} else {
-				log.Printf("Successfully triggered sound: %s", soundID)
-			}
+			b.PlaySoundGrouping(soundID)
 		}
 	}
 }
@@ -202,9 +199,36 @@ func (b *Bot) getRandomDuration() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func (b *Bot) PlaySoundGrouping(soundID string) {
+	if b.Config.RapidFireProbability < tolerance ||
+		rand.Float32() > b.Config.RapidFireProbability {
+		if err := b.PlaySoundboardSound(soundID); err != nil {
+			log.Printf("Single shot sound playback error: %v", err)
+		}
+	}
+	b.PlayRapidFireSound(soundID)
+}
+
+func (b *Bot) PlayRapidFireSound(soundID string) {
+	min := b.Config.RapidFireCountMin
+	max := b.Config.RapidFireCountMax
+	count := min + rand.IntN(max - min + 1)
+	min = b.Config.RapidFireMinInterval
+	max = b.Config.RapidFireMaxInterval
+	interval := min + rand.IntN(max - min + 1)
+	for range count {
+		// Use a goroutine to avoid latency of request handling
+		go func() {
+			if err := b.PlaySoundboardSound(soundID); err != nil {
+				log.Printf("Rapid fire burst error: %v", err)
+			}
+		}()
+
+		time.Sleep(time.Duration(interval) * time.Millisecond)
+	}
+}
+
 func (b *Bot) PlaySoundboardSound(soundID string) error {
-	// endpoint := discordgo.EndpointChannel(b.Config.VoiceChannelID) +
-	// 	"send-soundboard-sound"
 	endpoint := discordgo.EndpointAPI + fmt.Sprintf("channels/%s/send-soundboard-sound", b.Config.VoiceChannelID)
 
 	// Construct the payload to send to the Discord API

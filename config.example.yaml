@@ -3,6 +3,11 @@ server_id: 1234567890
 voice_channel_id: 1234567890
 min_interval_seconds: 60
 max_interval_seconds: 300
+rapid_fire_probability: 0.25
+rapid_fire_min_interval_milliseconds: 1
+rapid_fire_max_interval_milliseconds: 100
+rapid_fire_count_min: 3
+rapid_fire_count_max: 5
 excluded_sounds:
   - "excluded_sound_id_1"
   - "excluded_sound_id_2"
