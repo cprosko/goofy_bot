@@ -25,18 +25,11 @@ func main() {
 	}
 	log.Printf("Config:\n%+v\n", conf)
 
-	bot, err := InitializeBot(conf)
+	bot, err := InitializeBot(conf, ctx)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}
 	defer bot.Close()
-
-	err = bot.JoinVoiceChannel()
-	if err != nil {
-		log.Fatalf("Failed to join voice channel: %v", err)
-	}
-
-	go bot.StartSoundLoop(ctx)
 
 	<-ctx.Done()
 	log.Println("Shutting down...")
