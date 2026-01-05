@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	tolerance  float32 = 0.001
-	sampleRate int     = 48000
-	channels   int     = 2
-	frameSize  int     = 960 // 20ms @48kHz
-	// TODO: refactor sound generation command into constants here
+	tolerance               float32 = 0.001
+	audioRate               int     = 48000   // Discord standard audio rate
+	piperFormat             string  = "s161e" // Standard output format from Piper
+	piperChannels           int     = 1       // Number of audio channels Piper generates
+	outputChannels          int     = 2       // Number of audio channels Discord sound
+	packetLengthNanoseconds int     = 20000   // Audio chunk size needed by Discord
 )
 
 type Bot struct {
@@ -272,7 +273,7 @@ func (b *Bot) StartVoiceLoop() {
 		"Starting randomized voice response loop. Target channel: %s",
 		b.Config.VoiceChannelID,
 	)
-	
+
 	b.mu.RLock()
 	responses := b.Config.Responses["random"]
 	b.mu.RUnlock()
@@ -380,9 +381,13 @@ func (b *Bot) PreGenerateTTS() {
 			path := fmt.Sprintf("./cache/response_%s_%d.opus", k, i)
 
 			// Pipeline: Piper -> FFmpeg (raw Opus stream)
-			cmdStr := fmt.Sprintf("echo %q | piper --model %s --output-raw | "+
-				"ffmpeg -f s16le -ar 22050 -ac 1 -i pipe:0 -c:a libopus -ar 48000 "+
-				"-page_duration 20000 -ac 2 -y %s", resp, b.Config.VoiceModel, path)
+			cmdStr := fmt.Sprintf(
+				"echo %q | piper --model %s --output-raw | "+
+				"ffmpeg -f %s -ar 22050 -ac %v -i pipe:0 -c:a libopus -ar %v "+
+				"-page_duration %v -ac %v -y %s",
+				resp, b.Config.VoiceModel, piperFormat, piperChannels, audioRate,
+				packetLengthNanoseconds, outputChannels, path,
+			)
 
 			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
 				log.Printf("Failed to generate %s: %v", path, err)
@@ -486,14 +491,6 @@ func (b *Bot) respondWithTTS(responses []string) {
 	if err := b.Speak(response); err != nil {
 		log.Printf("TTS error: %v", err)
 	}
-}
-
-func pcmEnergy(samples []byte) float64 {
-	var sum float64
-	for _, s := range samples {
-		sum += float64(int16(s) * int16(s))
-	}
-	return sum / float64(len(samples))
 }
 
 func getRandomDuration(min int, max int) time.Duration {
