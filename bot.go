@@ -382,7 +382,7 @@ func (b *Bot) PreGenerateTTS() {
 			// Pipeline: Piper -> FFmpeg (raw Opus stream)
 			cmdStr := fmt.Sprintf("echo %q | piper --model %s --output-raw | "+
 				"ffmpeg -f s16le -ar 22050 -ac 1 -i pipe:0 -c:a libopus -ar 48000 "+
-				"-page_duration 20000 -ac 2 %s", resp, b.Config.VoiceModel, path)
+				"-page_duration 20000 -ac 2 -y %s", resp, b.Config.VoiceModel, path)
 
 			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
 				log.Printf("Failed to generate %s: %v", path, err)
