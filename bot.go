@@ -2,7 +2,10 @@ package main
 
 import (
 	// Standard Packages
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -20,7 +23,8 @@ import (
 const (
 	tolerance               float32 = 0.001
 	audioRate               int     = 48000   // Discord standard audio rate
-	piperFormat             string  = "s161e" // Standard output format from Piper
+	piperFormat             string  = "s16le" // Standard output format from Piper
+	piperRate               int     = 22050   // Rate for most 'medium' quality Piper models
 	piperChannels           int     = 1       // Number of audio channels Piper generates
 	outputChannels          int     = 2       // Number of audio channels Discord sound
 	packetLengthNanoseconds int     = 20000   // Audio chunk size needed by Discord
@@ -370,33 +374,90 @@ func (b *Bot) PlaySoundboardSound(soundID string) error {
 }
 
 func (b *Bot) PreGenerateTTS() {
-	log.Println("Pre-generating Opus sound files...")
+	log.Println("Checking Existence of or pre-generating Opus sound files...")
+	_ = os.Mkdir("./cache", 0755)
+
+	activeFiles := make(map[string]struct{})
+
 	b.mu.Lock()
 	b.VocalCache = make(map[string]string)
 	b.mu.Unlock()
-	_ = os.Mkdir("./cache", 0755)
 
-	for k, responses := range b.Config.Responses {
-		for i, resp := range responses {
-			path := fmt.Sprintf("./cache/response_%s_%d.opus", k, i)
+	for _, responses := range b.Config.Responses {
+		for _, resp := range responses {
+			path := b.getCachePath(resp)
+			activeFiles[path] = struct{}{}
 
+			// Skip generation if file exists
+			if _, err := os.Stat(path); err == nil {
+				log.Printf("Using cached file for: %q", resp)
+				continue
+			}
+			log.Printf("Generating new audio for: %q", resp)
 			// Pipeline: Piper -> FFmpeg (raw Opus stream)
-			cmdStr := fmt.Sprintf(
-				"echo %q | piper --model %s --output-raw | "+
-				"ffmpeg -f %s -ar 22050 -ac %v -i pipe:0 -c:a libopus -ar %v "+
+			cmdStr := fmt.Sprintf("piper --model %s --output-raw | "+
+				"ffmpeg -f %s -ar %v -ac %v -i pipe:0 -c:a libopus -ar %v "+
 				"-page_duration %v -ac %v -y %s",
-				resp, b.Config.VoiceModel, piperFormat, piperChannels, audioRate,
+				b.Config.VoiceModel, piperFormat, piperRate, piperChannels, audioRate,
 				packetLengthNanoseconds, outputChannels, path,
 			)
+			cmd := exec.Command("bash", "-c", cmdStr)
 
-			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
-				log.Printf("Failed to generate %s: %v", path, err)
+			// Pipe to the command's stdin
+			stdin, err := cmd.StdinPipe()
+			if err != nil {
+				log.Printf("Failed to create stdin pipe: %v", err)
+				continue
+			}
+
+			// Start the command, expecting stdin as its input
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			if err := cmd.Start(); err != nil {
+				log.Printf("Failed to start command: %v", err)
+				continue
+			}
+
+			// Write the response text directly to stdin
+			fmt.Fprintln(stdin, resp)
+			stdin.Close()
+
+			if err := cmd.Wait(); err != nil {
+				log.Printf("Failed to generate %s: %v\nFull Error: %s",
+					path, err, stderr.String())
 				continue
 			}
 
 			b.mu.Lock()
 			b.VocalCache[resp] = path
 			b.mu.Unlock()
+		}
+	}
+
+	// Clean files that are no longer relevant to the config
+	b.cleanCache(activeFiles)
+}
+
+func (b *Bot) getCachePath(text string) string {
+	hash := sha256.New()
+	// We hash both the text and the model name
+	hash.Write([]byte(text + b.Config.VoiceModel))
+	token := hex.EncodeToString(hash.Sum(nil))
+	return fmt.Sprintf("./cache/%s.opus", token)
+}
+
+func (b *Bot) cleanCache(activeFiles map[string]struct{}) {
+	files, err := os.ReadDir("./cache")
+	if err != nil {
+		log.Printf("Error cleaning cache: %v", err)
+		return
+	}
+
+	for _, f := range files {
+		path := "./cache/" + f.Name()
+		if _, exists := activeFiles[path]; !exists {
+			log.Printf("Removing old cache file: %s", path)
+			os.Remove(path)
 		}
 	}
 }
