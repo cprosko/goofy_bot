@@ -12,8 +12,8 @@ type Config struct {
 	Token                string              `yaml:"bot_token"`
 	ServerID             string              `yaml:"server_id"`
 	VoiceChannelID       string              `yaml:"voice_channel_id"`
-	MinInterval          int                 `yaml:"min_interval_seconds"`
-	MaxInterval          int                 `yaml:"max_interval_seconds"`
+	MinSoundInterval     int                 `yaml:"min_sound_interval_seconds"`
+	MaxSoundInterval     int                 `yaml:"max_sound_interval_seconds"`
 	RapidFireProbability float32             `yaml:"rapid_fire_probability"`
 	RapidFireMinInterval int                 `yaml:"rapid_fire_min_interval_milliseconds"`
 	RapidFireMaxInterval int                 `yaml:"rapid_fire_max_interval_milliseconds"`
@@ -24,6 +24,8 @@ type Config struct {
 	CommandResponses     map[string]string   `yaml:"command_responses"`
 	VoiceModel           string              `yaml:"voice_model"`
 	ResponseProbability  float32             `yaml:"response_probability"`
+	MinVoiceInterval     int                 `yaml:"min_voice_interval_seconds"`
+	MaxVoiceInterval     int                 `yaml:"max_voice_interval_seconds"`
 	Responses            map[string][]string `yaml:"responses"`
 }
 

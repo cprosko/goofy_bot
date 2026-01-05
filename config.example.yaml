@@ -1,8 +1,8 @@
 bot_token: 1234567890
 server_id: 1234567890
 voice_channel_id: 1234567890
-min_interval_seconds: 60
-max_interval_seconds: 300
+min_sound_interval_seconds: 60
+max_sound_interval_seconds: 300
 rapid_fire_probability: 0.25
 rapid_fire_min_interval_milliseconds: 1
 rapid_fire_max_interval_milliseconds: 100
@@ -16,8 +16,15 @@ command_responses:
   refresh: "🔄 Soundboard list refreshed!"
 voice_model: "en_US-reza_ibrahim-medium.onnx"
 response_probability: 0.1
+min_voice_interval_seconds: 60
+max_voice_interval_seconds: 120
 responses:
   joined:
     - "User just entered!"
+    - "Hi there!"
   left:
     - "User just left!"
+    - "I'm sad to see them go."
+  random:
+    - "I Just felt like I haven't said anything in a while..."
+    - "Surprise!"

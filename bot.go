@@ -162,7 +162,8 @@ func (b *Bot) registerHandlers() {
 				log.Printf("Join error: %v", err)
 			}
 			b.RefreshSounds()
-			go b.StartSoundLoop()
+			go b.StartSoundLoop() // Random soundboard sounds
+			go b.StartVoiceLoop() // Random voice responses
 		},
 	)
 	// React when user joins/leaves channel
@@ -200,10 +201,10 @@ func (b *Bot) handleVoiceStateUpdate(v *discordgo.VoiceStateUpdate) {
 
 	if joined && isInChannel {
 		log.Printf("User %s joined the channel", v.UserID)
-		b.maybeRespond(b.Config.ResponseProbability, b.Config.Responses["joined"])
+		b.maybeRespond(b.Config.ResponseProbability, "joined")
 	} else if left && !isInChannel {
 		log.Printf("User %s left the channel", v.UserID)
-		b.maybeRespond(b.Config.ResponseProbability, b.Config.Responses["left"])
+		b.maybeRespond(b.Config.ResponseProbability, "left")
 	}
 }
 
@@ -244,7 +245,7 @@ func (b *Bot) StartSoundLoop() {
 
 	for {
 		// Calculate random delay to wait for next sound
-		delay := b.getRandomDuration()
+		delay := b.getRandomSoundGap()
 		log.Printf("Next sound in %v", delay)
 
 		// Wait for the timer OR a potential stop signal
@@ -266,13 +267,55 @@ func (b *Bot) StartSoundLoop() {
 	}
 }
 
-func (b *Bot) getRandomDuration() time.Duration {
+func (b *Bot) StartVoiceLoop() {
+	log.Printf(
+		"Starting randomized voice response loop. Target channel: %s",
+		b.Config.VoiceChannelID,
+	)
+	
 	b.mu.RLock()
-	defer b.mu.RUnlock()
-	min := b.Config.MinInterval
-	max := b.Config.MaxInterval
-	seconds := rand.IntN(max-min+1) + min
-	return time.Duration(seconds) * time.Second
+	responses := b.Config.Responses["random"]
+	b.mu.RUnlock()
+
+	if len(responses) == 0 {
+		log.Printf("Now voice responses available, aborting voice loop...")
+		return
+	}
+
+	for {
+		// Calculate random delay to wait for next sound
+		delay := b.getRandomVoiceGap()
+		log.Printf("Next voice message in %v", delay)
+
+		// Wait for the timer OR a potential stop signal
+		select {
+		case <-b.ctx.Done():
+			log.Println("Sound loop received the stop signal. Exiting...")
+			return
+		case <-time.After(delay):
+			// Pick a response
+			text := responses[rand.IntN(len(responses))]
+			// Trigger the voice response
+			// NOTE: the bot must be in the voice channel for this to work
+			b.Speak(text)
+		}
+	}
+}
+
+func (b *Bot) getRandomSoundGap() time.Duration {
+	b.mu.RLock()
+	min := b.Config.MinSoundInterval
+	max := b.Config.MaxSoundInterval
+	b.mu.RUnlock()
+	return getRandomDuration(min, max)
+}
+
+func (b *Bot) getRandomVoiceGap() time.Duration {
+	b.mu.RLock()
+	min := b.Config.MinVoiceInterval
+	max := b.Config.MaxVoiceInterval
+	b.mu.RUnlock()
+	return getRandomDuration(min, max)
 }
 
 func (b *Bot) PlaySoundGrouping(soundID string) {
@@ -417,7 +460,7 @@ func (b *Bot) Speak(text string) error {
 	return nil
 }
 
-func (b *Bot) maybeRespond(probability float32, responses []string) {
+func (b *Bot) maybeRespond(probability float32, category string) {
 	b.mu.RLock()
 	if b.isSpeaking {
 		b.mu.RUnlock()
@@ -429,7 +472,7 @@ func (b *Bot) maybeRespond(probability float32, responses []string) {
 	log.Printf("Probability roll: %v (Needs to be < %v)", roll, probability)
 	if roll < probability {
 		log.Println("Probability check passed! Responding...")
-		go b.respondWithTTS(responses)
+		go b.respondWithTTS(b.Config.Responses[category])
 	}
 }
 
@@ -451,4 +494,9 @@ func pcmEnergy(samples []byte) float64 {
 		sum += float64(int16(s) * int16(s))
 	}
 	return sum / float64(len(samples))
+}
+
+func getRandomDuration(min int, max int) time.Duration {
+	seconds := rand.IntN(max-min+1) + min
+	return time.Duration(seconds) * time.Second
 }
