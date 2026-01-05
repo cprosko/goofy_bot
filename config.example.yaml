@@ -17,4 +17,7 @@ command_responses:
 voice_model: "en_US-reza_ibrahim-medium.onnx"
 response_probability: 0.1
 responses:
-  - "Sorry, I didn't quite understand that."
+  joined:
+    - "User just entered!"
+  left:
+    - "User just left!"

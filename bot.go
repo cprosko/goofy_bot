@@ -14,17 +14,14 @@ import (
 
 	// External Packages
 	"github.com/bwmarrin/discordgo"
-	"github.com/pion/opus"
 	"github.com/pion/webrtc/v3/pkg/media/oggreader"
 )
 
 const (
-	tolerance    float32 = 0.001
-	sampleRate           = 48000
-	channels             = 2
-	frameSize            = 960 // 20ms @48kHz
-	silenceAfter         = 600 * time.Millisecond
-	energyThresh         = 500.0
+	tolerance  float32 = 0.001
+	sampleRate int     = 48000
+	channels   int     = 2
+	frameSize  int     = 960 // 20ms @48kHz
 	// TODO: refactor sound generation command into constants here
 )
 
@@ -40,9 +37,6 @@ type Bot struct {
 	vc            *discordgo.VoiceConnection
 	mu            sync.RWMutex
 	ctx           context.Context
-	ssrcToUser    map[uint32]string
-	vadMu         sync.Mutex
-	vadStates     map[string]*vadState
 }
 
 type vadState struct {
@@ -65,8 +59,6 @@ func InitializeBot(conf *Config, ctx context.Context) (*Bot, error) {
 		loopRunning:   false,
 		isSpeaking:    false,
 		ctx:           ctx,
-		ssrcToUser:    make(map[uint32]string),
-		vadStates:     make(map[string]*vadState),
 	}
 	// In order: join voice channel and track who is in it, receive soundboard
 	// notification events, listen to channel text messages, and see message
@@ -81,7 +73,7 @@ func InitializeBot(conf *Config, ctx context.Context) (*Bot, error) {
 	bot.PreGenerateTTS()
 
 	// Begin bot session, join voice channel and add handlers
-	bot.RegisterHandlers()
+	bot.registerHandlers()
 	err = bot.Session.Open()
 	if err != nil {
 		return bot, fmt.Errorf("Could not open Session: %w", err)
@@ -114,58 +106,8 @@ func (b *Bot) JoinVoiceChannel() error {
 		}
 	}
 
-	// Enable voice receive: required for Discord to allow *sending* sound
-	go b.startVoiceReceive()
-
-	vc.AddHandler(
-		func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
-			b.mu.Lock()
-			defer b.mu.Unlock()
-			if vs.Speaking {
-				b.ssrcToUser[uint32(vs.SSRC)] = vs.UserID
-			} else {
-				delete(b.ssrcToUser, uint32(vs.SSRC))
-			}
-		},
-	)
-
 	log.Println("Voice connection established and handler registered.")
 	return nil
-}
-
-func (b *Bot) startVoiceReceive() {
-	log.Println("[VAD] Voice receive loop started")
-
-	decoder := opus.NewDecoder()
-
-	pcm := make([]byte, frameSize * channels)
-
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case pkt, ok := <-b.vc.OpusRecv:
-			if !ok || pkt == nil {
-				return
-			}
-
-			n, _, err := decoder.Decode(pkt.Opus, pcm)
-			if err != nil || n == 0 {
-				continue
-			}
-
-			energy := pcmEnergy(pcm[:n*channels])
-			userID, exists := b.ssrcToUser[uint32(pkt.SSRC)]
-			if !exists {
-				continue
-			}
-			b.processVAD(userID, energy)
-
-		case <-ticker.C:
-			b.checkForSpeechEnd()
-		}
-	}
 }
 
 func (b *Bot) RefreshSounds() {
@@ -198,7 +140,7 @@ func (b *Bot) RefreshSounds() {
 	log.Printf("Sounds refreshed. Total pool size: %d", len(finalPool))
 }
 
-func (b *Bot) RegisterHandlers() {
+func (b *Bot) registerHandlers() {
 	// Join channel on Session ready and server recognized
 	b.Session.AddHandler(
 		func(s *discordgo.Session, g *discordgo.GuildCreate) {
@@ -206,7 +148,6 @@ func (b *Bot) RegisterHandlers() {
 			if g.ID != b.Config.ServerID {
 				return
 			}
-			log.Printf("Guild available: %s", g.Name)
 
 			// Ensure we only start one loop
 			b.mu.Lock()
@@ -224,6 +165,12 @@ func (b *Bot) RegisterHandlers() {
 			go b.StartSoundLoop()
 		},
 	)
+	// React when user joins/leaves channel
+	b.Session.AddHandler(
+		func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
+			b.handleVoiceStateUpdate(v)
+		},
+	)
 	// Listen to messages in the text channel
 	b.Session.AddHandler(
 		func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -236,6 +183,28 @@ func (b *Bot) RegisterHandlers() {
 			b.interpretEvent(e)
 		},
 	)
+}
+
+func (b *Bot) handleVoiceStateUpdate(v *discordgo.VoiceStateUpdate) {
+	// Ignore bot itself
+	if v.UserID == b.Session.State.User.ID {
+		return
+	}
+
+	// Determine if user joined or left the bot's channel
+	joined := v.BeforeUpdate == nil ||
+		v.BeforeUpdate.ChannelID != b.Config.VoiceChannelID
+	left := v.BeforeUpdate != nil &&
+		v.BeforeUpdate.ChannelID == b.Config.VoiceChannelID
+	isInChannel := v.ChannelID == b.Config.VoiceChannelID
+
+	if joined && isInChannel {
+		log.Printf("User %s joined the channel", v.UserID)
+		b.maybeRespond(b.Config.ResponseProbability, b.Config.Responses["joined"])
+	} else if left && !isInChannel {
+		log.Printf("User %s left the channel", v.UserID)
+		b.maybeRespond(b.Config.ResponseProbability, b.Config.Responses["left"])
+	}
 }
 
 func (b *Bot) handleMessage(msg *discordgo.MessageCreate) {
@@ -363,22 +332,24 @@ func (b *Bot) PreGenerateTTS() {
 	b.mu.Unlock()
 	_ = os.Mkdir("./cache", 0755)
 
-	for i, text := range b.Config.Responses {
-		path := fmt.Sprintf("./cache/response_%d.opus", i)
+	for k, responses := range b.Config.Responses {
+		for i, resp := range responses {
+			path := fmt.Sprintf("./cache/response_%s_%d.opus", k, i)
 
-		// Pipeline: Piper -> FFmpeg (raw Opus stream)
-		cmdStr := fmt.Sprintf("echo %q | piper --model %s --output-raw | "+
-			"ffmpeg -f s16le -ar 22050 -ac 1 -i pipe:0 -c:a libopus -ar 48000 "+
-			"-page_duration 20000 -ac 2 %s", text, b.Config.VoiceModel, path)
+			// Pipeline: Piper -> FFmpeg (raw Opus stream)
+			cmdStr := fmt.Sprintf("echo %q | piper --model %s --output-raw | "+
+				"ffmpeg -f s16le -ar 22050 -ac 1 -i pipe:0 -c:a libopus -ar 48000 "+
+				"-page_duration 20000 -ac 2 %s", resp, b.Config.VoiceModel, path)
 
-		if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
-			log.Printf("Failed to generate %s: %v", path, err)
-			continue
+			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
+				log.Printf("Failed to generate %s: %v", path, err)
+				continue
+			}
+
+			b.mu.Lock()
+			b.VocalCache[resp] = path
+			b.mu.Unlock()
 		}
-
-		b.mu.Lock()
-		b.VocalCache[text] = path
-		b.mu.Unlock()
 	}
 }
 
@@ -401,6 +372,7 @@ func (b *Bot) Speak(text string) error {
 		b.mu.Unlock()
 	}()
 
+	// Open cached audio file
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -412,13 +384,12 @@ func (b *Bot) Speak(text string) error {
 		return fmt.Errorf("Failed to create ogg reader: %w", err)
 	}
 
-	// Important: Small delay to ensure voice connection is ready to stream
 	b.vc.Speaking(true)
 	defer b.vc.Speaking(false)
 
+	// Send audio file packet-by-packet
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
-
 	for {
 		// ParseNextPage retuns raw Opus packets from one Ogg page
 		payload, _, err := ogg.ParseNextPage()
@@ -446,68 +417,23 @@ func (b *Bot) Speak(text string) error {
 	return nil
 }
 
-func (b *Bot) processVAD(userID string, energy float64) {
-	if userID == b.Session.State.User.ID {
-		return
-	}
-
-	now := time.Now()
-
-	b.vadMu.Lock()
-	defer b.vadMu.Unlock()
-
-	state, exists := b.vadStates[userID]
-	if !exists {
-		state = &vadState{}
-		b.vadStates[userID] = state
-	}
-
-	if energy > energyThresh {
-		if !state.speaking {
-			log.Printf("[VAD] User %s started speaking", userID)
-			state.speaking = true
-		}
-		state.lastVoice = now
-	}
-}
-
-func (b *Bot) checkForSpeechEnd() {
-	now := time.Now()
-
-	b.vadMu.Lock()
-	defer b.vadMu.Unlock()
-	for userID, state := range b.vadStates {
-		if state.speaking && now.Sub(state.lastVoice) > silenceAfter {
-			state.speaking = false
-			log.Printf("[VAD] User %s finished speaking", userID)
-
-			go b.maybeRespond()
-		}
-	}
-}
-
-func (b *Bot) maybeRespond() {
+func (b *Bot) maybeRespond(probability float32, responses []string) {
 	b.mu.RLock()
 	if b.isSpeaking {
 		b.mu.RUnlock()
 		return
 	}
-	prob := b.Config.ResponseProbability
 	b.mu.RUnlock()
 
 	roll := rand.Float32()
-	log.Printf("Probability roll: %v (Needs to be < %v)", roll, prob)
-	if roll < prob {
+	log.Printf("Probability roll: %v (Needs to be < %v)", roll, probability)
+	if roll < probability {
 		log.Println("Probability check passed! Responding...")
-		go b.respondWithTTS()
+		go b.respondWithTTS(responses)
 	}
 }
 
-func (b *Bot) respondWithTTS() {
-	b.mu.RLock()
-	responses := b.Config.Responses
-	b.mu.RUnlock()
-
+func (b *Bot) respondWithTTS(responses []string) {
 	if len(responses) == 0 {
 		return
 	}
