@@ -14,6 +14,7 @@ excluded_sounds:
 use_default_sounds: true
 command_responses:
   refresh: "🔄 Soundboard list refreshed!"
+voice_model: "en_US-reza_ibrahim-medium.onnx"
 response_probability: 0.1
 responses:
   - "Sorry, I didn't quite understand that."

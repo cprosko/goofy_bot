@@ -17,4 +17,9 @@ require (
 	golang.org/x/sys v0.39.0 // indirect
 )
 
+require (
+	github.com/pion/opus v0.0.0-20251220203711-2b653045ba2f
+	github.com/pion/webrtc/v3 v3.3.6
+)
+
 require github.com/darui3018823/discordgo v0.29.0-patched-2 // indirect

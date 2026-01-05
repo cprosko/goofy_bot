@@ -1,3 +1,6 @@
+# Exclude voice models and cached audio
+*onnx*
+cache/
 # Exclude bot executable
 goofy_bot
 # Exclude as it includes private Discord information

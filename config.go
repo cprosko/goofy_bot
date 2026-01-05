@@ -22,6 +22,7 @@ type Config struct {
 	ExcludedSounds       []string          `yaml:"excluded_sounds"`
 	UseDefaultSounds     bool              `yaml:"use_default_sounds"`
 	CommandResponses     map[string]string `yaml:"command_responses"`
+	VoiceModel           string            `yaml:"voice_model"`
 	ResponseProbability  float32           `yaml:"response_probability"`
 	Responses            []string          `yaml:"responses"`
 }
