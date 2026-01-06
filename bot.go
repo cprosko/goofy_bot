@@ -25,6 +25,8 @@ const (
 	audioRate               int     = 48000   // Discord standard audio rate
 	piperFormat             string  = "s16le" // Standard output format from Piper
 	piperRate               int     = 22050   // Rate for most 'medium' quality Piper models
+	compressionLevel        int     = 10      // Compression used by Piper
+	bitRate                 int     = 64      // Bitrate for Piper audio output, in kBits/s
 	piperChannels           int     = 1       // Number of audio channels Piper generates
 	outputChannels          int     = 2       // Number of audio channels Discord sound
 	packetLengthNanoseconds int     = 20000   // Audio chunk size needed by Discord
@@ -78,6 +80,9 @@ func InitializeBot(conf *Config, ctx context.Context) (*Bot, error) {
 	bot.PreGenerateTTS()
 
 	// Begin bot session, join voice channel and add handlers
+	log.Printf(" Session OS / Browser: %s / %s",
+		bot.Session.Identify.Properties.OS,
+		bot.Session.Identify.Properties.Browser)
 	bot.registerHandlers()
 	err = bot.Session.Open()
 	if err != nil {
@@ -391,15 +396,18 @@ func (b *Bot) PreGenerateTTS() {
 			// Skip generation if file exists
 			if _, err := os.Stat(path); err == nil {
 				log.Printf("Using cached file for: %q", resp)
+				b.mu.Lock()
+				b.VocalCache[resp] = path
+				b.mu.Unlock()
 				continue
 			}
 			log.Printf("Generating new audio for: %q", resp)
 			// Pipeline: Piper -> FFmpeg (raw Opus stream)
 			cmdStr := fmt.Sprintf("piper --model %s --output-raw | "+
-				"ffmpeg -f %s -ar %v -ac %v -i pipe:0 -c:a libopus -ar %v "+
-				"-page_duration %v -ac %v -y %s",
+				"ffmpeg -y -f %s -ar %v -ac %v -i pipe:0 -c:a libopus -ar %v "+
+				"-page_duration %v -ac %v -compression_level %v -b:a %vk -vbr off %s",
 				b.Config.VoiceModel, piperFormat, piperRate, piperChannels, audioRate,
-				packetLengthNanoseconds, outputChannels, path,
+				packetLengthNanoseconds, outputChannels, compressionLevel, bitRate, path,
 			)
 			cmd := exec.Command("bash", "-c", cmdStr)
 
@@ -495,6 +503,9 @@ func (b *Bot) Speak(text string) error {
 
 	b.vc.Speaking(true)
 	defer b.vc.Speaking(false)
+
+	// Ensure Speaking(true) is processed before audio is sent
+	time.Sleep(200 * time.Millisecond)
 
 	// Send audio file packet-by-packet
 	ticker := time.NewTicker(20 * time.Millisecond)
