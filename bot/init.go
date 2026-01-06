@@ -17,17 +17,20 @@ import (
 )
 
 type Bot struct {
-	Session       *discordgo.Session
-	Config        *shared.Config
-	SoundManager  *shared.SoundManager
-	CustomSounds  []string
-	DefaultSounds []string
-	VocalCache    map[string]string
-	loopRunning   bool
-	isSpeaking    bool
-	vc            *discordgo.VoiceConnection
-	mu            sync.RWMutex
-	ctx           context.Context
+	Session           *discordgo.Session
+	Config            *shared.Config
+	SoundManager      *shared.SoundManager
+	CustomSounds      []string
+	DefaultSounds     []string
+	vocalCache        map[string]string
+	lastResponseTimes map[string]time.Time
+	loopRunning       bool
+	respondingToLeave bool
+	respondingToEnter bool
+	speakingMu        sync.Mutex
+	vc                *discordgo.VoiceConnection
+	mu                sync.RWMutex
+	ctx               context.Context
 }
 
 func InitializeBot(conf *shared.Config, ctx context.Context) (*Bot, error) {
@@ -36,15 +39,17 @@ func InitializeBot(conf *shared.Config, ctx context.Context) (*Bot, error) {
 		return nil, fmt.Errorf("Could not create Session: %w", err)
 	}
 	bot := &Bot{
-		Session:       session,
-		Config:        conf,
-		SoundManager:  &shared.SoundManager{AvailableIDs: []string{}},
-		CustomSounds:  []string{},
-		DefaultSounds: []string{},
-		VocalCache:    make(map[string]string),
-		loopRunning:   false,
-		isSpeaking:    false,
-		ctx:           ctx,
+		Session:           session,
+		Config:            conf,
+		SoundManager:      &shared.SoundManager{AvailableIDs: []string{}},
+		CustomSounds:      []string{},
+		DefaultSounds:     []string{},
+		vocalCache:        make(map[string]string),
+		lastResponseTimes: make(map[string]time.Time),
+		loopRunning:       false,
+		respondingToLeave: false,
+		respondingToEnter: false,
+		ctx:               ctx,
 	}
 	// In order: join voice channel and track who is in it, receive soundboard
 	// notification events, listen to channel text messages, and see message
@@ -160,9 +165,26 @@ func (b *Bot) handleVoiceStateUpdate(v *discordgo.VoiceStateUpdate) {
 
 	if joined && isInChannel {
 		log.Printf("User %s joined the channel", v.UserID)
+
+		b.mu.RLock()
+		if time.Since(b.lastResponseTimes["joined"]) < b.Config.Cooldown {
+			b.mu.RUnlock()
+			return
+		}
+		b.lastResponseTimes["joined"] = time.Now()
+		b.mu.RUnlock()
+
 		b.maybeRespond(b.Config.ResponseProbability, "joined")
 	} else if left && !isInChannel {
 		log.Printf("User %s left the channel", v.UserID)
+		
+		b.mu.RLock()
+		if time.Since(b.lastResponseTimes["left"]) < b.Config.Cooldown {
+			b.mu.RUnlock()
+			return
+		}
+		b.mu.RUnlock()
+
 		b.maybeRespond(b.Config.ResponseProbability, "left")
 	}
 }

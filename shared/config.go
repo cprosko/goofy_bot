@@ -3,6 +3,7 @@ package shared
 import (
 	// Standard Packages
 	"os"
+	"time"
 
 	// External Packages
 	"gopkg.in/yaml.v3"
@@ -24,6 +25,7 @@ type Config struct {
 	CommandResponses     map[string]string   `yaml:"command_responses"`
 	VoiceModel           string              `yaml:"voice_model"`
 	ResponseProbability  float32             `yaml:"response_probability"`
+	Cooldown             time.Duration       `yaml:"response_cooldown"`
 	MinVoiceInterval     int                 `yaml:"min_voice_interval_seconds"`
 	MaxVoiceInterval     int                 `yaml:"max_voice_interval_seconds"`
 	Responses            map[string][]string `yaml:"responses"`

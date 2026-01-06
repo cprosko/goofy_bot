@@ -81,7 +81,7 @@ func (b *Bot) preGenerateTTS() {
 	activeFiles := make(map[string]struct{})
 
 	b.mu.Lock()
-	b.VocalCache = make(map[string]string)
+	b.vocalCache = make(map[string]string)
 	b.mu.Unlock()
 
 	for _, responses := range b.Config.Responses {
@@ -124,23 +124,16 @@ func (b *Bot) cleanCache(activeFiles map[string]struct{}) {
 }
 
 func (b *Bot) Speak(text string) error {
-	log.Printf("Responding to voice with response: %s", text)
+	log.Printf("About to say: %s", text)
 	b.mu.RLock()
-	path, exists := b.VocalCache[text]
+	path, exists := b.vocalCache[text]
 	b.mu.RUnlock()
 	if !exists {
 		return fmt.Errorf("No cache for: %s", text)
 	}
 
-	b.mu.Lock()
-	b.isSpeaking = true
-	b.mu.Unlock()
-
-	defer func() {
-		b.mu.Lock()
-		b.isSpeaking = false
-		b.mu.Unlock()
-	}()
+	b.speakingMu.Lock()
+	defer b.speakingMu.Unlock()
 
 	// Open cached audio file
 	file, err := os.Open(path)
@@ -197,7 +190,7 @@ func (b *Bot) generateTTSAndGetPath(text string) (string, error) {
 	if _, err := os.Stat(path); err == nil {
 		log.Printf("Using cached file for: %q", text)
 		b.mu.Lock()
-		b.VocalCache[text] = path
+		b.vocalCache[text] = path
 		b.mu.Unlock()
 		return path, nil
 	}
@@ -234,24 +227,20 @@ func (b *Bot) generateTTSAndGetPath(text string) (string, error) {
 	}
 
 	b.mu.Lock()
-	b.VocalCache[text] = path
+	b.vocalCache[text] = path
 	b.mu.Unlock()
 
 	return path, nil
 }
 
 func (b *Bot) maybeRespond(probability float32, category string) {
-	b.mu.RLock()
-	if b.isSpeaking {
-		b.mu.RUnlock()
-		return
-	}
-	b.mu.RUnlock()
-
 	roll := rand.Float32()
 	log.Printf("Probability roll: %v (Needs to be < %v)", roll, probability)
 	if roll < probability {
 		log.Println("Probability check passed! Responding...")
+		b.mu.Lock()
+		b.lastResponseTimes[category] = time.Now()
+		b.mu.Unlock()
 		go b.respondWithTTS(b.Config.Responses[category])
 	}
 }

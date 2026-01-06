@@ -15,6 +15,7 @@ command_responses:
   refresh: "🔄 Soundboard list refreshed!"
 voice_model: "en_US-reza_ibrahim-medium.onnx"
 response_probability: 0.1
+response_cooldown: "5s"
 min_voice_interval_seconds: 60
 max_voice_interval_seconds: 120
 responses:
