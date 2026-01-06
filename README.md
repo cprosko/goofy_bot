@@ -1,7 +1,7 @@
 # `goofy_bot`
 
 A Discord bot written in Go with the [`discordgo`](https://github.com/darui3018823/discordgo) library which configurably plays random soundboard sounds.
-It also synthesizes voice clips and plays them randomly, when users enter/leave the channel, or (WIP) on command.
+It also synthesizes voice clips and plays them randomly, when users enter/leave the channel, or on command.
 
 ## Installation & Usage
 
@@ -28,6 +28,8 @@ To start up the bot:
 3. Have fun!
 
 The bot should automatically refresh the soundboard sounds when it changes, but you can force a manual refresh by sending the `!refresh` command to the voice channel chat.
+You can also make the bot say a phrase by typing for example `!say Hello, I'm going to say something now!` into the channel chat.
+This will cause the bot to synthesize a new audio file stored in `./cache/`, which is not cleaned until the next time the bot is booted up.
 
 ## Configuration
 
