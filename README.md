@@ -46,6 +46,7 @@ Below, we explain all of the configuration parameters present in `config.example
 * `command_responses`: The text messages the bot will send to the voice channel's text chat to acknowledge it received a command. These can be left as default.
 * `voice_model`: The exact filename of the `.onnx` Piper voice model file in your repository clone's root directory.
 * `response_probability`: The probability that the bot will respond with a voice message when a user enters or leaves the voice channel, expressed as a number between 0 and 1.
+* `response_cooldown`: The minimum time to wait before reacting again to a user joining or leaving the voice channel. Expressed as a time string, *e.g.* `"5s"` for 5 seconds.
 * `min_voice_interval_seconds`/`max_voice_interval_seconds`: The minimum and maximum amount of seconds between the bot playing a random voice message. These messages are specified under `responses:random`.
 * `responses`:
   * `joined`: A list of responses to choose from to play when a user joins the voice channel.
