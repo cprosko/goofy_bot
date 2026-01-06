@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,7 +56,7 @@ func InitializeBot(conf *shared.Config, ctx context.Context) (*Bot, error) {
 	// IntentsMessageContent must also be activated in Developer Portal
 
 	// Pregenerate response audio
-	bot.PreGenerateTTS()
+	bot.preGenerateTTS()
 
 	// Begin bot session, join voice channel and add handlers
 	log.Printf(" Session OS / Browser: %s / %s",
@@ -171,14 +172,24 @@ func (b *Bot) handleMessage(msg *discordgo.MessageCreate) {
 	if msg.Author.ID == b.Session.State.User.ID {
 		return
 	}
-	// '!refresh': refresh soundboard
-	if msg.Content == "!refresh" {
+	content := msg.Content
+	switch {
+	case strings.HasPrefix(content, "!refresh"):
+		// refresh soundboard
 		log.Printf("Refresh command received from user: %s", msg.Author.Username)
 		b.RefreshSounds()
 		b.mu.RLock()
 		b.Session.ChannelMessageSend(msg.ChannelID,
 			b.Config.CommandResponses["refresh"])
 		b.mu.RUnlock()
+	case strings.HasPrefix(content, "!say "):
+		text := string(content[5:])
+		_, err := b.generateTTSAndGetPath(text)
+		if err != nil {
+			log.Printf("Error generating audio for !say command with text %s: %v",
+				text, err)
+		}
+		b.Speak(text)
 	}
 }
 

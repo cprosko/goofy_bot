@@ -21,14 +21,14 @@ import (
 )
 
 const (
-	audioRate               int     = 48000   // Discord standard audio rate
-	piperFormat             string  = "s16le" // Standard output format from Piper
-	piperRate               int     = 22050   // Rate for most 'medium' quality Piper models
-	compressionLevel        int     = 10      // Compression used by Piper
-	bitRate                 int     = 64      // Bitrate for Piper audio output, in kBits/s
-	piperChannels           int     = 1       // Number of audio channels Piper generates
-	outputChannels          int     = 2       // Number of audio channels Discord sound
-	packetLengthNanoseconds int     = 20000   // Audio chunk size needed by Discord
+	audioRate               int    = 48000   // Discord standard audio rate
+	piperFormat             string = "s16le" // Standard output format from Piper
+	piperRate               int    = 22050   // Rate for most 'medium' quality Piper models
+	compressionLevel        int    = 10      // Compression used by Piper
+	bitRate                 int    = 64      // Bitrate for Piper audio output, in kBits/s
+	piperChannels           int    = 1       // Number of audio channels Piper generates
+	outputChannels          int    = 2       // Number of audio channels Discord sound
+	packetLengthNanoseconds int    = 20000   // Audio chunk size needed by Discord
 )
 
 func (b *Bot) StartVoiceLoop() {
@@ -74,7 +74,7 @@ func (b *Bot) randomVoiceGap() time.Duration {
 	return shared.RandomDuration(min, max)
 }
 
-func (b *Bot) PreGenerateTTS() {
+func (b *Bot) preGenerateTTS() {
 	log.Println("Checking Existence of or pre-generating Opus sound files...")
 	_ = os.Mkdir("./cache", 0755)
 
@@ -86,55 +86,12 @@ func (b *Bot) PreGenerateTTS() {
 
 	for _, responses := range b.Config.Responses {
 		for _, resp := range responses {
-			path := b.getCachePath(resp)
-			activeFiles[path] = struct{}{}
-
-			// Skip generation if file exists
-			if _, err := os.Stat(path); err == nil {
-				log.Printf("Using cached file for: %q", resp)
-				b.mu.Lock()
-				b.VocalCache[resp] = path
-				b.mu.Unlock()
-				continue
-			}
-			log.Printf("Generating new audio for: %q", resp)
-			// Pipeline: Piper -> FFmpeg (raw Opus stream)
-			cmdStr := fmt.Sprintf("piper --model %s --output-raw | "+
-				"ffmpeg -y -f %s -ar %v -ac %v -i pipe:0 -c:a libopus -ar %v "+
-				"-page_duration %v -ac %v -compression_level %v -b:a %vk -vbr off %s",
-				b.Config.VoiceModel, piperFormat, piperRate, piperChannels, audioRate,
-				packetLengthNanoseconds, outputChannels, compressionLevel, bitRate, path,
-			)
-			cmd := exec.Command("bash", "-c", cmdStr)
-
-			// Pipe to the command's stdin
-			stdin, err := cmd.StdinPipe()
+			path, err := b.generateTTSAndGetPath(resp)
 			if err != nil {
-				log.Printf("Failed to create stdin pipe: %v", err)
+				fmt.Printf("Unable to generate audio for text \"%s\", full error:", err)
 				continue
 			}
-
-			// Start the command, expecting stdin as its input
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
-			if err := cmd.Start(); err != nil {
-				log.Printf("Failed to start command: %v", err)
-				continue
-			}
-
-			// Write the response text directly to stdin
-			fmt.Fprintln(stdin, resp)
-			stdin.Close()
-
-			if err := cmd.Wait(); err != nil {
-				log.Printf("Failed to generate %s: %v\nFull Error: %s",
-					path, err, stderr.String())
-				continue
-			}
-
-			b.mu.Lock()
-			b.VocalCache[resp] = path
-			b.mu.Unlock()
+			activeFiles[path] = struct{}{}
 		}
 	}
 
@@ -231,6 +188,56 @@ func (b *Bot) Speak(text string) error {
 		}
 	}
 	return nil
+}
+
+func (b *Bot) generateTTSAndGetPath(text string) (string, error) {
+	path := b.getCachePath(text)
+
+	// Skip generation if file exists
+	if _, err := os.Stat(path); err == nil {
+		log.Printf("Using cached file for: %q", text)
+		b.mu.Lock()
+		b.VocalCache[text] = path
+		b.mu.Unlock()
+		return path, nil
+	}
+	log.Printf("Generating new audio for: %q", text)
+	// Pipeline: Piper -> FFmpeg (raw Opus stream)
+	cmdStr := fmt.Sprintf("piper --model %s --output-raw | "+
+		"ffmpeg -y -f %s -ar %v -ac %v -i pipe:0 -c:a libopus -ar %v "+
+		"-page_duration %v -ac %v -compression_level %v -b:a %vk -vbr off %s",
+		b.Config.VoiceModel, piperFormat, piperRate, piperChannels, audioRate,
+		packetLengthNanoseconds, outputChannels, compressionLevel, bitRate, path,
+	)
+	cmd := exec.Command("bash", "-c", cmdStr)
+
+	// Pipe to the command's stdin
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return "", fmt.Errorf("Failed to create stdin pipe: %w", err)
+	}
+
+	// Start the command, expecting stdin as its input
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("Failed to start command: %w", err)
+	}
+
+	// Write the response text directly to stdin
+	fmt.Fprintln(stdin, text)
+	stdin.Close()
+
+	if err := cmd.Wait(); err != nil {
+		return "", fmt.Errorf("Failed to generate %s: %w\nFull Error: %s",
+			path, err, stderr.String())
+	}
+
+	b.mu.Lock()
+	b.VocalCache[text] = path
+	b.mu.Unlock()
+
+	return path, nil
 }
 
 func (b *Bot) maybeRespond(probability float32, category string) {
