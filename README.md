@@ -9,12 +9,12 @@ It also synthesizes voice clips and plays them randomly, when users enter/leave 
 
 1. Install [Piper](https://github.com/rhasspy/piper) (for audio synthesis), [`ffmpeg`](https://www.ffmpeg.org/) (for audio conversion), and [Go](go.dev), and ensure they exist on `$PATH`.
 2. Install the bot application on your voice channel with this [install link](https://discord.com/oauth2/authorize?client_id=1453886705625993379) or create your own bot application on the [Discord Developer Portal](https://discord.com/developers/). If creating your own bot, ensure the following:
-  1. Under *Installation/Guild Install*, add the `bot` to Scopes.
-  2. Under *Bot*, grant the application "Message Content Intent".
-  3. Under *Installation/Installation Contexts*, ensure "Guild Install" is checked.
+    1. Under *Installation/Guild Install*, add the `bot` to Scopes.
+    2. Under *Bot*, grant the application "Message Content Intent".
+    3. Under *Installation/Installation Contexts*, ensure "Guild Install" is checked.
 3. Clone this repository.
 4. If using voice synthesis features, download a Piper voice model (see [here](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US) for example) including the `.onnx` and `.onnx.json` files into your repository's root directory.
-  * The code (`bot.go`) assumes a sample rate of 22050MHz, as is the case for most 'Medium' quality Piper models. This is specified on the `MODEL_CARD` file for the model you download. If your model doesn't match this, simply change the value of the `piperRate` constant in `bot.go`.
+    * The code (`bot.go`) assumes a sample rate of 22050MHz, as is the case for most 'Medium' quality Piper models. This is specified on the `MODEL_CARD` file for the model you download. If your model doesn't match this, simply change the value of the `piperRate` constant in `bot.go`.
 5. From the repository root directory, build the Go project with `go build -o goofy_bot`
 6. Create a `config.yaml` configuration in the repository root directory, see `config.example.yaml` for a reference to its format and all parameters. See also the below Configuration section for more details.
   * Adjusting the `config.yaml` does *not* require rebuilding the Go files.
