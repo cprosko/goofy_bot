@@ -2,6 +2,11 @@ package main
 
 // Standard packages
 import (
+	// Internal Packages
+	"goofybot/bot"
+	"goofybot/shared"
+
+	// Standard packages
 	"context"
 	"log"
 	"os"
@@ -19,17 +24,17 @@ func main() {
 	defer stop()
 
 	// Load configuration
-	conf, err := ParseConfig(configPath)
+	conf, err := shared.ParseConfig(configPath)
 	if err != nil {
 		log.Fatal("Error loading config.yaml,", err)
 	}
 	log.Printf("Config:\n%+v\n", conf)
 
-	bot, err := InitializeBot(conf, ctx)
+	myBot, err := bot.InitializeBot(conf, ctx)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}
-	defer bot.Close()
+	defer myBot.Close()
 
 	<-ctx.Done()
 	log.Println("Shutting down...")

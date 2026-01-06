@@ -1,7 +1,10 @@
-package main
+package bot
 
 import (
-	// Standard Packages
+	// Internal packages
+	"goofybot/shared"
+
+	// Standard packages
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -15,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	// External Packages
+	// External packages
 	"github.com/bwmarrin/discordgo"
 	"github.com/pion/webrtc/v3/pkg/media/oggreader"
 )
@@ -34,8 +37,8 @@ const (
 
 type Bot struct {
 	Session       *discordgo.Session
-	Config        *Config
-	SoundManager  *SoundManager
+	Config        *shared.Config
+	SoundManager  *shared.SoundManager
 	CustomSounds  []string
 	DefaultSounds []string
 	VocalCache    map[string]string
@@ -51,7 +54,7 @@ type vadState struct {
 	lastVoice time.Time
 }
 
-func InitializeBot(conf *Config, ctx context.Context) (*Bot, error) {
+func InitializeBot(conf *shared.Config, ctx context.Context) (*Bot, error) {
 	session, err := discordgo.New("Bot " + conf.Token)
 	if err != nil {
 		return nil, fmt.Errorf("Could not create Session: %w", err)
@@ -59,7 +62,7 @@ func InitializeBot(conf *Config, ctx context.Context) (*Bot, error) {
 	bot := &Bot{
 		Session:       session,
 		Config:        conf,
-		SoundManager:  &SoundManager{AvailableIDs: []string{}},
+		SoundManager:  &shared.SoundManager{AvailableIDs: []string{}},
 		CustomSounds:  []string{},
 		DefaultSounds: []string{},
 		VocalCache:    make(map[string]string),
@@ -121,24 +124,24 @@ func (b *Bot) JoinVoiceChannel() error {
 }
 
 func (b *Bot) RefreshSounds() {
-	customSounds, err := fetchGuildSounds(b.Session, b.Config.ServerID)
+	customSounds, err := shared.FetchGuildSounds(b.Session, b.Config.ServerID)
 	if err != nil {
 		log.Printf("Error fetching custom sounds: %v", err)
 		return
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.CustomSounds = availableSounds(customSounds, b.Config)
+	b.CustomSounds = shared.AvailableSounds(customSounds, b.Config)
 
 	var finalPool []string
 	if b.Config.UseDefaultSounds {
 		// Only fetch defaults if we haven't already
 		if len(b.DefaultSounds) == 0 {
-			defaultSounds, err := fetchDefaultSounds(b.Session, b.Config.ServerID)
+			defaultSounds, err := shared.FetchDefaultSounds(b.Session, b.Config.ServerID)
 			if err != nil {
 				log.Printf("Error fetching default sounds: %v", err)
 			} else {
-				b.DefaultSounds = availableSounds(defaultSounds, b.Config)
+				b.DefaultSounds = shared.AvailableSounds(defaultSounds, b.Config)
 			}
 		}
 		finalPool = append(b.CustomSounds, b.DefaultSounds...)

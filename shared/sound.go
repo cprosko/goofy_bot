@@ -1,4 +1,4 @@
-package main
+package shared
 
 import (
 	// Standard Packages
@@ -41,7 +41,25 @@ func (sm *SoundManager) UpdateIDs(newIDs []string) {
 	sm.Unlock()
 }
 
-func fetchDefaultSounds(
+func AvailableSounds(
+	allSounds []Sound,
+	conf *Config,
+) []string {
+	excludedSet := make(map[string]struct{})
+	for _, id := range conf.ExcludedSounds {
+		excludedSet[id] = struct{}{}
+	}
+	var pool []string
+	// Only add sounds to sound pool NOT in excluded list
+	for _, sound := range allSounds {
+		if _, exists := excludedSet[sound.ID]; !exists {
+			pool = append(pool, sound.ID)
+		}
+	}
+	return pool
+}
+
+func FetchDefaultSounds(
 	session *discordgo.Session,
 	guildID string,
 ) ([]Sound, error) {
@@ -49,7 +67,7 @@ func fetchDefaultSounds(
 	return fetchSounds(session, endpoint)
 }
 
-func fetchGuildSounds(
+func FetchGuildSounds(
 	session *discordgo.Session,
 	guildID string,
 ) ([]Sound, error) {
@@ -77,22 +95,3 @@ func fetchSounds(
 	}
 	return response.Items, nil
 }
-
-func availableSounds(
-	allSounds []Sound,
-	conf *Config,
-) []string {
-	excludedSet := make(map[string]struct{})
-	for _, id := range conf.ExcludedSounds {
-		excludedSet[id] = struct{}{}
-	}
-	var pool []string
-	// Only add sounds to sound pool NOT in excluded list
-	for _, sound := range allSounds {
-		if _, exists := excludedSet[sound.ID]; !exists {
-			pool = append(pool, sound.ID)
-		}
-	}
-	return pool
-}
-
