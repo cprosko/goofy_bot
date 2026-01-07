@@ -1,25 +1,41 @@
 package bot
 
 import (
-	// Internal packages
+	// Internal packages ---------------------------------------------------------
+
+	// Provides data structures and logic for configuration and soundboard sounds
 	"goofybot/shared"
 
-	// Standard packages
+	// Standard packages ---------------------------------------------------------
+
+	// For creating buffer for remembering stderr for executed shell commands
 	"bytes"
+	// For generating unique hashes for each generated voice clip
 	"crypto/sha256"
+	// For converting hashes into strings
 	"encoding/hex"
+	// Allows creating formatted error objects
 	"fmt"
+	// Enables checking for the end of read files
 	"io"
+	// For printing errors and messages to the log
 	"log"
+	// For probabilistically responding with voice and choosing responses 
 	"math/rand/v2"
+	// Enables making/deleting files and directories, and reading audio files.
 	"os"
+	// Enables running shell commands for generating audio
 	"os/exec"
+	// Provides functionality for waiting/sleeping
 	"time"
 
-	// External packages
+	// External packages ---------------------------------------------------------
+
+	// Enables parsing generated audio files for streaming to Discord as voice
 	"github.com/pion/webrtc/v3/pkg/media/oggreader"
 )
 
+// Parameters determining Piper voice synthesis and audio generation
 const (
 	audioRate               int    = 48000   // Discord standard audio rate
 	piperFormat             string = "s16le" // Standard output format from Piper
@@ -31,6 +47,8 @@ const (
 	packetLengthNanoseconds int    = 20000   // Audio chunk size needed by Discord
 )
 
+// StartVoiceLoop begins infinite loop of randomly playing voice clips.
+// Should be run as a goroutine.
 func (b *Bot) StartVoiceLoop() {
 	log.Printf(
 		"Starting randomized voice response loop. Target channel: %s",
@@ -66,6 +84,7 @@ func (b *Bot) StartVoiceLoop() {
 	}
 }
 
+// randomVoiceGap returns a random Duration before playing next voice clip.
 func (b *Bot) randomVoiceGap() time.Duration {
 	b.mu.RLock()
 	min := b.Config.MinVoiceInterval
@@ -74,6 +93,10 @@ func (b *Bot) randomVoiceGap() time.Duration {
 	return shared.RandomDuration(min, max)
 }
 
+// preGenerateTTS generates voice clips with Piper or finds cached voice clip.
+// It stores a map from the message's text to the filepath of the related clip
+// in Bot.VocalCache. It also deletes any sound clips in ./cache/ which do not
+// correspond to any potential voice clip in the Bot.Config.
 func (b *Bot) preGenerateTTS() {
 	log.Println("Checking Existence of or pre-generating Opus sound files...")
 	_ = os.Mkdir("./cache", 0755)
@@ -99,6 +122,8 @@ func (b *Bot) preGenerateTTS() {
 	b.cleanCache(activeFiles)
 }
 
+// getCachePath creates a unique audio file path for a given voice message.
+// This enables a unique mapping from messages to their generated voice clips.
 func (b *Bot) getCachePath(text string) string {
 	hash := sha256.New()
 	// We hash both the text and the model name
@@ -107,6 +132,7 @@ func (b *Bot) getCachePath(text string) string {
 	return fmt.Sprintf("./cache/%s.opus", token)
 }
 
+// ceanCache deletes all audio files not listed in input activeFiles.
 func (b *Bot) cleanCache(activeFiles map[string]struct{}) {
 	files, err := os.ReadDir("./cache")
 	if err != nil {
@@ -123,6 +149,9 @@ func (b *Bot) cleanCache(activeFiles map[string]struct{}) {
 	}
 }
 
+// Speak causes the bot to play the audio clip matching `text` to the channel.
+// If a matching audio clip has not yet been generated, it returns an error.
+// Also returns an error if the audio file couldn't be opened or parsed.
 func (b *Bot) Speak(text string) error {
 	log.Printf("About to say: %s", text)
 	b.mu.RLock()
@@ -183,6 +212,11 @@ func (b *Bot) Speak(text string) error {
 	return nil
 }
 
+// generateTTSAndGetPath synthesizes a voice clip saying the input text.
+// It returns the generated clip's relative file path, and an error if the clip
+// generation fails.
+// It stores a map between the text and the filepath in the Bot's VocalCache
+// member.
 func (b *Bot) generateTTSAndGetPath(text string) (string, error) {
 	path := b.getCachePath(text)
 
@@ -233,6 +267,8 @@ func (b *Bot) generateTTSAndGetPath(text string) (string, error) {
 	return path, nil
 }
 
+// maybeRespond responds with a voice clip given input probability and response
+// category.
 func (b *Bot) maybeRespond(probability float32, category string) {
 	roll := rand.Float32()
 	log.Printf("Probability roll: %v (Needs to be < %v)", roll, probability)
@@ -245,6 +281,9 @@ func (b *Bot) maybeRespond(probability float32, category string) {
 	}
 }
 
+// respondWithTTS speaks with a random response from the input list of responses.
+// Logs an error and fails if an audio clip has not already been generated for
+// the randomly selected response.
 func (b *Bot) respondWithTTS(responses []string) {
 	if len(responses) == 0 {
 		return

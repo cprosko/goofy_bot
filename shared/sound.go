@@ -1,17 +1,24 @@
 package shared
 
 import (
-	// Standard Packages
+	// Standard Packages ---------------------------------------------------------
+
+	// Allows unmarshalling of soundboard data from Discord's API
 	"encoding/json"
+	// For formatting errors
 	"fmt"
+	// For selecting random sounds
 	"math/rand/v2"
+	// Provides Mutexes for safe concurrency
 	"sync"
 
-	// External Packages
+	// External Packages ---------------------------------------------------------
 
+	// Provides interface with Discord's API for bots
 	"github.com/bwmarrin/discordgo"
 )
 
+// Sound includes all information about a Soundboard sound on Discord
 type Sound struct {
 	ID        string `json:"sound_id"`
 	Name      string `json:"name"`
@@ -21,11 +28,14 @@ type Sound struct {
 	Available bool   `json:"available"`
 }
 
+// SoundManager enables safe access and writing of available soundboard sounds.
 type SoundManager struct {
 	sync.RWMutex
 	AvailableIDs []string
 }
 
+// GetRandomID returns a randomly selected soundboard sound ID.
+// Uses a SoundManager struct as input to provide the list of available sounds.
 func (sm *SoundManager) GetRandomID() string {
 	sm.RLock()
 	defer sm.RUnlock()
@@ -35,12 +45,15 @@ func (sm *SoundManager) GetRandomID() string {
 	return sm.AvailableIDs[rand.IntN(len(sm.AvailableIDs))]
 }
 
+// UpdateIDs safely updates the available sound IDs in a SoundManager
 func (sm *SoundManager) UpdateIDs(newIDs []string) {
 	sm.Lock()
 	sm.AvailableIDs = newIDs
 	sm.Unlock()
 }
 
+// AvailableSounds returns a filtered list of sound info excluding some sounds.
+// The excluded sounds are specified by the input Config.ExcludedSounds.
 func AvailableSounds(
 	allSounds []Sound,
 	conf *Config,
@@ -59,6 +72,8 @@ func AvailableSounds(
 	return pool
 }
 
+// FetchDefaultSounds returns the sound info for Discord's default sounds.
+// It also returns an error if API requests or data unmarshalling fails.
 func FetchDefaultSounds(
 	session *discordgo.Session,
 	guildID string,
@@ -67,6 +82,8 @@ func FetchDefaultSounds(
 	return fetchSounds(session, endpoint)
 }
 
+// FetchGuildSounds returns the sound info for custom sounds on a Guild/Server.
+// It also returns an error if API requests or data unmarshalling fails.
 func FetchGuildSounds(
 	session *discordgo.Session,
 	guildID string,
@@ -75,6 +92,8 @@ func FetchGuildSounds(
 	return fetchSounds(session, endpoint)
 }
 
+// fetchSounds attempts to unmarshal a Discord API endpoint into Sound info.
+// It also returns an error if the API request or data unmarshalling fails.
 func fetchSounds(
 	session *discordgo.Session,
 	endpoint string,

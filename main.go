@@ -1,15 +1,37 @@
+/*
+goofybot connects and runs a Discord bot for playing silly voices and sounds.
+It uses a config.yaml as configuration in the same directory and requires a
+Discord bot token under DISCORD_BOT_TOKEN defined as an environment variable.
+It also requires ffmpeg (for audio conversion) and Piper (for voice synthesis)
+to be installed and available on $PATH.
+
+See docstring for Config struct for details of configuring the bot.
+
+Usage:
+
+	./goofy_bot
+	(after compiling the software with `go build -o goofy_bot`)
+*/
 package main
 
-// Standard packages
 import (
-	// Internal Packages
+	// Internal Packages ---------------------------------------------------------
+
+	// Main bot logic
 	"goofybot/bot"
+	// Functionality relating to soundboard sounds and configuration
 	"goofybot/shared"
 
-	// Standard packages
+	// Standard packages ---------------------------------------------------------
+
+	// Provides Context object for coordinating the closure of the program
 	"context"
+	// For logging of the bot activity and errors
 	"log"
+	// For recognizing a program interrupt signal (e.g. ctrl+C)
 	"os"
+	// Provides special Context object signalling when a close signal is received
+	// for the application
 	"os/signal"
 )
 

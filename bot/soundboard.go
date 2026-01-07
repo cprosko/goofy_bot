@@ -1,21 +1,32 @@
 package bot
 
 import (
-	// Internal packages
+	// Internal packages ---------------------------------------------------------
+
+	// Provides data structures and logic for configuration and soundboard sounds
 	"goofybot/shared"
 
-	// Standard packages
+	// Standard packages ---------------------------------------------------------
+
+	// Allows creating formatted error objects
 	"fmt"
+	// For printing errors and messages to the log
 	"log"
+	// For probabilistically playing sounds
 	"math/rand/v2"
+	// Provides functionality for waiting/sleeping
 	"time"
 
-	// External packages
+	// External packages ---------------------------------------------------------
+
+	// Provides interface with Discord's API for bots
 	"github.com/bwmarrin/discordgo"
 )
 
+// Tolerance to consider a probability identically 'zero'
 const tolerance float32 = 0.0001
 
+// RefreshSounds updates the bot's knowledge of the Discord soundboard
 func (b *Bot) RefreshSounds() {
 	customSounds, err := shared.FetchGuildSounds(b.Session, b.Config.ServerID)
 	if err != nil {
@@ -46,6 +57,8 @@ func (b *Bot) RefreshSounds() {
 	log.Printf("Sounds refreshed. Total pool size: %d", len(finalPool))
 }
 
+// StartSoundLoop begins infinite loop randomly playing soundboard sounds.
+// To be used as a goroutine.
 func (b *Bot) StartSoundLoop() {
 	log.Printf(
 		"Starting randomized sound loop. Target channel: %s",
@@ -76,6 +89,8 @@ func (b *Bot) StartSoundLoop() {
 	}
 }
 
+// PlaySoundGrouping plays a sound or rapid-fire repetition of sounds.
+// It chooses whether to play a single sound or rapid fire probabilistically.
 func (b *Bot) PlaySoundGrouping(soundID string) {
 	if b.Config.RapidFireProbability < tolerance ||
 		rand.Float32() > b.Config.RapidFireProbability {
@@ -87,6 +102,9 @@ func (b *Bot) PlaySoundGrouping(soundID string) {
 	b.PlayRapidFireSound(soundID)
 }
 
+// PlayRapidFireSound plays a soundboard sound rapidly and repeatedly.
+// Takes the soundboard sound ID as input, and determines the number of plays
+// and gap between plays randomly within a range specified in the bot's Config.
 func (b *Bot) PlayRapidFireSound(soundID string) {
 	min := b.Config.RapidFireCountMin
 	max := b.Config.RapidFireCountMax
@@ -106,6 +124,8 @@ func (b *Bot) PlayRapidFireSound(soundID string) {
 	}
 }
 
+// PlaySoundboardSound plays a sound a single time given its sound ID.
+// Also returns an error if the API request to play the sound failed.
 func (b *Bot) PlaySoundboardSound(soundID string) error {
 	endpoint := discordgo.EndpointAPI +
 		fmt.Sprintf("channels/%s/send-soundboard-sound", b.Config.VoiceChannelID)
@@ -126,6 +146,8 @@ func (b *Bot) PlaySoundboardSound(soundID string) error {
 	return nil
 }
 
+// randomSoundGap calculates a random gap between rapid-fire sound plays.
+// The gap is between the range specified in the bot's Config.
 func (b *Bot) randomSoundGap() time.Duration {
 	b.mu.RLock()
 	min := b.Config.MinSoundInterval
